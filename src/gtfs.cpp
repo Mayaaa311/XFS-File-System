@@ -85,7 +85,16 @@ gtfs_t* gtfs_init(string directory, int verbose_flag) {
     }
 
     // Open the log file
-    gtfs->log_filename = directory + "/.gtfs_log";
+    gtfs->log_filename = directory + "/gtfs_log";
+    gtfs->log_file.open(gtfs->log_filename.c_str(), std::ios::out | std::ios::app);
+
+    // Recover from log if necessary
+    if (recover_from_log(gtfs) != 0) {
+        VERBOSE_PRINT(do_verbose, "Recovery from log failed\n");
+        delete gtfs;
+        return NULL;
+    }
+
     gtfs->log_file.open(gtfs->log_filename.c_str(), std::ios::out | std::ios::app);
 
     if (!gtfs->log_file.is_open()) {
@@ -94,12 +103,7 @@ gtfs_t* gtfs_init(string directory, int verbose_flag) {
         return NULL;
     }
 
-    // Recover from log if necessary
-    if (recover_from_log(gtfs) != 0) {
-        VERBOSE_PRINT(do_verbose, "Recovery from log failed\n");
-        delete gtfs;
-        return NULL;
-    }
+
     gtfs->mode='N';
     VERBOSE_PRINT(do_verbose, "Success\n"); //On success returns non NULL.
     return gtfs;
@@ -218,12 +222,22 @@ int gtfs_clean(gtfs_t *gtfs) {
         //     VERBOSE_PRINT(do_verbose, "Failed to truncate log file during clean\n");
         //     return -1;
         // }
+
         // Check the file size
         struct stat st;
-        if (stat(gtfs->log_filename.c_str(), &st) == 0 && st.st_size != 0) {
-            VERBOSE_PRINT(do_verbose, "Log file truncation failed\n");
+        // if (stat(gtfs->log_filename.c_str(), &st) == 0 && st.st_size != 0) {
+        //     VERBOSE_PRINT(do_verbose, "Log file truncation failed\n");
+        //     return -1;
+        // }
+
+        // Delete the log file if truncation was successful
+        if (remove(gtfs->log_filename.c_str()) != 0) {
+            VERBOSE_PRINT(do_verbose, "Failed to delete log file during cleanup\n");
             return -1;
+        } else {
+            VERBOSE_PRINT(do_verbose, "Log file successfully deleted\n");
         }
+
         ret = 0;
     } else {
         VERBOSE_PRINT(do_verbose, "GTFileSystem does not exist\n");
@@ -231,6 +245,7 @@ int gtfs_clean(gtfs_t *gtfs) {
     }
 
     VERBOSE_PRINT(do_verbose, "Success\n"); //On success returns 0.
+
     return ret;
 }
 
