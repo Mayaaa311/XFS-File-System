@@ -10,54 +10,6 @@
 int do_verbose;
 
 
-int lockfile(gtfs_t* gtfs, const std::string& filename) {
-    int fd = open(filename.c_str(), O_WRONLY | O_CREAT, 0666);
-    if (fd == -1) {
-        perror("Failed to open the file");
-        return 1;
-    }
-
-    // Set up the lock structure for locking
-    gtfs->fl.l_type = F_WRLCK;     // Exclusive write lock
-    gtfs->fl.l_whence = SEEK_SET;  // Lock from the beginning of the file
-    gtfs->fl.l_start = 0;          // Start of the lock
-    gtfs->fl.l_len = 0;            // 0 means lock the whole file
-
-    // Lock the file
-    if (fcntl(fd, F_SETLKW, &gtfs->fl) == -1) {  // F_SETLKW blocks until the lock is acquired
-        std::cerr << "Failed to lock the file." << std::endl;
-        close(fd);
-        return 1;
-    }
-
-    close(fd);  // Close the file descriptor after locking
-    return 0;   // Success
-}
-
-int unlockfile(gtfs_t* gtfs, const std::string& filename) {
-    int fd = open(filename.c_str(), O_WRONLY | O_CREAT, 0666);
-    if (fd == -1) {
-        perror("Failed to open the file");
-        return 1;
-    }
-
-    // Set up the lock structure for unlocking
-    gtfs->fl.l_type = F_UNLCK;     // Unlock
-    gtfs->fl.l_whence = SEEK_SET;  // Unlock from the beginning of the file
-    gtfs->fl.l_start = 0;          // Start of the unlock
-    gtfs->fl.l_len = 0;            // 0 means unlock the whole file
-
-    // Unlock the file
-    if (fcntl(fd, F_SETLK, &gtfs->fl) == -1) {
-        std::cerr << "Failed to unlock the file." << std::endl;
-        close(fd);
-        return 1;
-    }
-
-    close(fd);  // Close the file descriptor after unlocking
-    return 0;   // Success
-}
-
 gtfs_t* gtfs_init(string directory, int verbose_flag) {
     do_verbose = verbose_flag;
     gtfs_t *gtfs = new gtfs_t();
@@ -87,7 +39,7 @@ gtfs_t* gtfs_init(string directory, int verbose_flag) {
     // Open the log file
     gtfs->log_filename = directory + "/gtfs_log";
     gtfs->log_file.open(gtfs->log_filename.c_str(), std::ios::out | std::ios::app);
-
+    VERBOSE_PRINT(do_verbose, "FILE map: "<<gtfs->open_files.size()<<endl);
     // Recover from log if necessary
     if (recover_from_log(gtfs) != 0) {
         VERBOSE_PRINT(do_verbose, "Recovery from log failed\n");
@@ -140,8 +92,23 @@ int recover_from_log(gtfs_t *gtfs) {
         if (entry.action == 'W') {//write
             // Read data block of 'length' bytes
             char *data_buf = new char[entry.length];
-            iss.read(data_buf, entry.length);
-            VERBOSE_PRINT(do_verbose,"IN RECOVERY, read from log: W: "<< data_buf<<endl);
+            int bytes_read = 0;
+            char ch[1];
+            iss.read(ch,1);
+            while(bytes_read < entry.length){
+                
+                iss.read(data_buf+bytes_read, entry.length);
+                bytes_read +=iss.gcount();
+                if(bytes_read == entry.length)
+                    break;
+                if (!std::getline(log_file_in, line)) break;
+            }
+            
+
+            VERBOSE_PRINT(do_verbose,"length "<<entry.length);
+            
+            VERBOSE_PRINT(do_verbose,"?"<<data_buf);
+            VERBOSE_PRINT(do_verbose,"IN RECOVERY, read from log: W: "<< data_buf<<"DONE");
 
     
             write_t* w = new write_t(gtfs, gtfs->open_files[entry.filename], entry.offset, entry.length, data_buf, entry.write_id);
@@ -188,13 +155,13 @@ string generate_log_entry(log_entry_t entry) {
     ss << entry.action << " " << entry.write_id << " " << entry.filename << " "
        << entry.offset << " " << entry.length << " " << entry.data << "\n";
       cout << entry.action << " " << entry.write_id << " " << entry.filename << " "
-       << entry.offset << " " << entry.length << " " << entry.data << "\n";
+       << entry.offset << " " << entry.length << " " << entry.data<<endl;
     return ss.str();
 }
 
 int write_log_entry(gtfs_t *gtfs, log_entry_t &entry) {
     string log_entry_str = generate_log_entry(entry);
-    gtfs->log_file << log_entry_str<<endl;
+    gtfs->log_file << log_entry_str;
     gtfs->log_file.flush();  // Ensure the log entry is written to disk
     return 0;
 }
@@ -563,7 +530,7 @@ int gtfs_sync_write_file(write_t* write_op) {
             entry.length = write_op->length;
             entry.data = write_op->data;
             entry.write_id = write_op->write_id;
-            VERBOSE_PRINT(do_verbose, "WROTE in sync to log: "<< entry.data);
+            VERBOSE_PRINT(do_verbose, "WROTE in sync to log: "<< entry.data<<"end");
             if (write_log_entry(gtfs, entry) != 0) {
                 VERBOSE_PRINT(do_verbose, "Failed to write log entry for write\n");
                 return -1;

@@ -133,13 +133,13 @@ int main(int argc, char **argv) {
     cout << "Testing that data written by one process is then successfully read by another process.\n";
     test_write_read();
 
-    // cout << "================== Test 2 ==================\n";
-    // cout << "Testing that aborting a write returns the file to its original contents.\n";
-    // test_abort_write();
+    cout << "================== Test 2 ==================\n";
+    cout << "Testing that aborting a write returns the file to its original contents.\n";
+    test_abort_write();
 
-    // cout << "================== Test 3 ==================\n";
-    // cout << "Testing that the logs are truncated.\n";
-    // test_truncate_log();
+    cout << "================== Test 3 ==================\n";
+    cout << "Testing that the logs are truncated.\n";
+    test_truncate_log();
 
     // TODO: Call any additional tests
 
