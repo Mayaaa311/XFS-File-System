@@ -100,6 +100,8 @@ char* gtfs_read_file(gtfs_t* gtfs, file_t* fl, int offset, int length);
 write_t* gtfs_write_file(gtfs_t* gtfs, file_t* fl, int offset, int length, const char* data);
 int gtfs_sync_write_file(write_t* write_op);
 int gtfs_abort_write_file(write_t* write_op);
+int gtfs_clean_n_bytes(gtfs_t *gtfs, int bytes);
+int gtfs_sync_write_file_n_bytes(write_t* write_op, int bytes);
 
 // Additional helper functions
 int recover_from_log(gtfs_t *gtfs);

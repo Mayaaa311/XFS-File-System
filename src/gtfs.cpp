@@ -9,7 +9,34 @@
 
 int do_verbose;
 
+std::string string_to_binary(const std::string &input) {
+    std::string binary_result;
 
+    for (char c : input) {
+        // Convert each character to an 8-bit binary string
+        std::bitset<8> binary_char(c);
+        binary_result += binary_char.to_string(); // Append the binary string
+    }
+
+    return binary_result; // Return the complete binary representation
+}
+std::string binary_to_string(const std::string &binary) {
+    std::string result;
+
+    // Process the binary string in chunks of 8 bits
+    for (std::size_t i = 0; i < binary.length(); i += 8) {
+        // Extract the 8-bit chunk
+        std::string byte = binary.substr(i, 8);
+
+        // Convert the 8-bit binary string to an unsigned long
+        std::bitset<8> bits(byte);
+        char character = static_cast<char>(bits.to_ulong()); // Convert to character
+
+        result += character; // Append the character to the result
+    }
+
+    return result; // Return the reconstructed string
+}
 gtfs_t* gtfs_init(string directory, int verbose_flag) {
     do_verbose = verbose_flag;
     gtfs_t *gtfs = new gtfs_t();
@@ -38,7 +65,7 @@ gtfs_t* gtfs_init(string directory, int verbose_flag) {
 
     // Open the log file
     gtfs->log_filename = directory + "/gtfs_log";
-    gtfs->log_file.open(gtfs->log_filename.c_str(), std::ios::out | std::ios::app);
+    gtfs->log_file.open(gtfs->log_filename.c_str(), std::ios::out | std::ios::app | std::ios::binary);
     VERBOSE_PRINT(do_verbose, "FILE map: "<<gtfs->open_files.size()<<endl);
     // Recover from log if necessary
     if (recover_from_log(gtfs) != 0) {
@@ -47,7 +74,7 @@ gtfs_t* gtfs_init(string directory, int verbose_flag) {
         return NULL;
     }
 
-    gtfs->log_file.open(gtfs->log_filename.c_str(), std::ios::out | std::ios::app);
+    gtfs->log_file.open(gtfs->log_filename.c_str(), std::ios::out | std::ios::app| std::ios::binary);
 
     if (!gtfs->log_file.is_open()) {
         VERBOSE_PRINT(do_verbose, "Failed to open log file\n");
@@ -63,7 +90,7 @@ gtfs_t* gtfs_init(string directory, int verbose_flag) {
 
 int recover_from_log(gtfs_t *gtfs) {
     VERBOSE_PRINT(do_verbose, "Recovering from log file\n");
-    fstream log_file_in(gtfs->log_filename.c_str(), ios::in);
+    fstream log_file_in(gtfs->log_filename.c_str(), ios::in | std::ios::binary);
     if (!log_file_in.is_open()) {
         VERBOSE_PRINT(do_verbose, "Failed to open log file for reading\n");
         return -1;
@@ -76,8 +103,11 @@ int recover_from_log(gtfs_t *gtfs) {
         gtfs->mode='R';
         if (line.empty()) continue; // Skip empty lines
 
-        istringstream iss(line);
         log_entry_t entry;
+        // VERBOSE_PRINT(do_verbose, "Retrieved Line " << line << "\n");
+        line = binary_to_string(line);
+        istringstream iss(line);
+        VERBOSE_PRINT(do_verbose, "line to string" << line << "END\n");
         if (!(iss >> entry.action >>  entry.write_id >> entry.filename >> entry.offset >> entry.length)) {
             VERBOSE_PRINT(do_verbose, "Malformed log entry: " << line << "\n");
             continue;  // Skip malformed entries
@@ -88,28 +118,21 @@ int recover_from_log(gtfs_t *gtfs) {
             gtfs->open_files[entry.filename] = &curfile;
         }
         file_t* curfile = gtfs->open_files[entry.filename];
+
+        // Read data block of 'length' bytes
+        char *data_buf = new char[entry.length];
+        char ch[1];
+        iss.read(ch,1);
+        iss.read(data_buf, entry.length);
+        if(iss.gcount() != entry.length){
+            VERBOSE_PRINT(do_verbose, "Malformed log entry: " << line << "\n");
+            continue;
+        }
         // if its a begin
         if (entry.action == 'W') {//write
-            // Read data block of 'length' bytes
-            char *data_buf = new char[entry.length];
-            int bytes_read = 0;
-            char ch[1];
-            iss.read(ch,1);
-            while(bytes_read < entry.length){
-                
-                iss.read(data_buf+bytes_read, entry.length);
-                bytes_read +=iss.gcount();
-                if(bytes_read == entry.length)
-                    break;
-                if (!std::getline(log_file_in, line)) break;
-            }
-            
 
-            VERBOSE_PRINT(do_verbose,"length "<<entry.length);
+            // VERBOSE_PRINT(do_verbose,"IN RECOVERY, read from log: W: "<< data_buf);
             
-            VERBOSE_PRINT(do_verbose,"?"<<data_buf);
-            VERBOSE_PRINT(do_verbose,"IN RECOVERY, read from log: W: "<< data_buf<<"DONE");
-
     
             write_t* w = new write_t(gtfs, gtfs->open_files[entry.filename], entry.offset, entry.length, data_buf, entry.write_id);
 
@@ -119,8 +142,6 @@ int recover_from_log(gtfs_t *gtfs) {
                 gtfs->next_write_id = entry.write_id + 1;
             }
         } else if (entry.action == 'S') {//syncs
-                //WRITE FROM curfile pending write to disk, for the same write id
-            //  if found write, sync it
             for(int i = 0; i < curfile->pending_writes.size(); i++){
                 if(curfile->pending_writes[i]->write_id == entry.write_id){
                     gtfs_sync_write_file(curfile->pending_writes[i]);
@@ -128,6 +149,7 @@ int recover_from_log(gtfs_t *gtfs) {
                 }
             }
         } else if (entry.action == 'A') {//abort
+
             for(int i = 0; i < curfile->pending_writes.size(); i++){
                 if(curfile->pending_writes[i]->write_id == entry.write_id){
                     gtfs_abort_write_file(curfile->pending_writes[i]);
@@ -154,9 +176,10 @@ string generate_log_entry(log_entry_t entry) {
     stringstream ss;
     ss << entry.action << " " << entry.write_id << " " << entry.filename << " "
        << entry.offset << " " << entry.length << " " << entry.data << "\n";
-      cout << entry.action << " " << entry.write_id << " " << entry.filename << " "
-       << entry.offset << " " << entry.length << " " << entry.data<<endl;
-    return ss.str();
+    //   cout << entry.action << " " << entry.write_id << " " << entry.filename << " "
+    //    << entry.offset << " " << entry.length << " " << entry.data;
+    string binrep = string_to_binary(ss.str())+"\n";
+    return binrep;
 }
 
 int write_log_entry(gtfs_t *gtfs, log_entry_t &entry) {
@@ -182,27 +205,20 @@ int gtfs_clean(gtfs_t *gtfs) {
             file->pending_writes.clear();
         }
 
-        // Truncate the log file
-        gtfs->log_file.close();
-        // gtfs->log_file.open(gtfs->log_filename.c_str(), ios::trunc | ios::app);
-        // if (!gtfs->log_file.is_open()) {
-        //     VERBOSE_PRINT(do_verbose, "Failed to truncate log file during clean\n");
-        //     return -1;
-        // }
+        // Close the log file if it’s open
+        if (gtfs->log_file.is_open()) {
+            gtfs->log_file.close();
+        }
+
+        // Reopen the log file in truncation mode
+        std::ofstream clear_file(gtfs->log_filename.c_str(), std::ios::out | std::ios::trunc);
+        clear_file.close(); // Close after truncating to ensure no file locks
 
         // Check the file size
         struct stat st;
-        // if (stat(gtfs->log_filename.c_str(), &st) == 0 && st.st_size != 0) {
-        //     VERBOSE_PRINT(do_verbose, "Log file truncation failed\n");
-        //     return -1;
-        // }
-
-        // Delete the log file if truncation was successful
-        if (remove(gtfs->log_filename.c_str()) != 0) {
-            VERBOSE_PRINT(do_verbose, "Failed to delete log file during cleanup\n");
+        if (stat(gtfs->log_filename.c_str(), &st) == 0 && st.st_size != 0) {
+            VERBOSE_PRINT(do_verbose, "Log file truncation failed\n");
             return -1;
-        } else {
-            VERBOSE_PRINT(do_verbose, "Log file successfully deleted\n");
         }
 
         ret = 0;
@@ -378,7 +394,7 @@ int gtfs_remove_file(gtfs_t* gtfs, file_t* fl) {
         entry.action = 'R';
         entry.filename = fl->filename;
         entry.offset = 0;
-        entry.length = 0;
+        entry.length = 2;
         entry.data = "NA";
         entry.write_id = gtfs->next_write_id++;
 
@@ -477,12 +493,13 @@ write_t* gtfs_write_file(gtfs_t* gtfs, file_t* fl, int offset, int length, const
 
         // Create a new write_t
         write_op = new write_t(gtfs,fl,offset,length,new char[length],gtfs->next_write_id);
-
+        VERBOSE_PRINT(do_verbose, "THIS IS WRITE's DATA itself: " << data<<", with length "<<strlen(data)<<" want length "<<length<<" lOOK HERE\n!");
         memcpy(write_op->data, data, length);
+        VERBOSE_PRINT(do_verbose, "THIS IS WRITE's DATA after memcpy: " << write_op->data<<" lOOK HERE\n!");
 
         // Add the write to fl->pending_writes
         fl->pending_writes.push_back(write_op);
-
+    
 
         // Log the remove operation
         log_entry_t entry;
@@ -491,9 +508,8 @@ write_t* gtfs_write_file(gtfs_t* gtfs, file_t* fl, int offset, int length, const
         entry.offset = offset;
         entry.length = length;
         entry.data = std::string(write_op->data,length);
-        entry.data.resize(length); // Resize to hold `length` elements
-        std::copy(write_op->data, write_op->data + length, entry.data.begin());
-        VERBOSE_PRINT(do_verbose, "THIS IS WRITE's DATA: " << write_op->data<<" lOOK HERE\n!");
+        // entry.data.resize(length); // Resize to hold `length` elements
+        // std::copy(write_op->data, write_op->data + length, entry.data.begin());
         entry.write_id = gtfs->next_write_id++;
 
         if (write_log_entry(gtfs, entry) != 0) {
@@ -508,7 +524,7 @@ write_t* gtfs_write_file(gtfs_t* gtfs, file_t* fl, int offset, int length, const
         return NULL;
     }
 
-    VERBOSE_PRINT(do_verbose, "Success, written \n"<<write_op->data); //On success returns non NULL.
+    VERBOSE_PRINT(do_verbose, "Success, written:"<<write_op->data); //On success returns non NULL.
 
     return write_op;
 }
@@ -594,7 +610,25 @@ int gtfs_abort_write_file(write_t* write_op) {
         VERBOSE_PRINT(do_verbose, "Aborting write of " << write_op->length << " bytes starting from offset " << write_op->offset << " inside file " << write_op->file->filename << "\n");
 
         file_t *fl = write_op->file;
+        gtfs_t *gtfs = write_op->gtfs;
 
+        if(gtfs->mode == 'N'){
+            // Log the write operation
+            log_entry_t entry;
+            entry.action = 'A';
+            entry.filename = fl->filename;
+            entry.offset = write_op->offset;
+            entry.length = write_op->length;
+            entry.data = write_op->data;
+            entry.write_id = write_op->write_id;
+            VERBOSE_PRINT(do_verbose, "WROTE in sync to log: "<< entry.data<<"end");
+            if (write_log_entry(gtfs, entry) != 0) {
+                VERBOSE_PRINT(do_verbose, "Failed to write log entry for write\n");
+                return -1;
+            }
+
+            flush_log_file(gtfs);
+        }
 
         // Remove the write from the pending_writes of the file
         std::vector<write_t*> &pending_writes = fl->pending_writes;
@@ -611,6 +645,54 @@ int gtfs_abort_write_file(write_t* write_op) {
     return ret;
 }
 
+
+int clean_characters_from_end(const std::string &filename, std::streamsize num_chars) {
+    // Open the file in binary mode to manipulate the file's raw bytes
+    std::fstream file(filename, std::ios::in | std::ios::out | std::ios::binary);
+    
+    if (!file.is_open()) {
+        std::cerr << "Error opening file." << std::endl;
+        return -1;
+    }
+
+    // Seek to the end of the file to determine its size
+    file.seekg(0, std::ios::end);
+    std::streamsize file_size = file.tellg(); // Get the current size of the file
+
+    // Check if num_chars to clean is less than the current file size
+    if (num_chars > file_size) {
+        std::cerr << "Error: Number of characters to clean exceeds file size." << std::endl;
+        file.close();
+        return -1;
+    }
+
+    // Calculate the new file size after cleaning
+    std::streamsize new_size = file_size - num_chars;
+
+    // Truncate the file
+    // Create a new file stream to truncate the file
+    std::ofstream ofs(filename, std::ios::out | std::ios::binary | std::ios::trunc);
+    if (!ofs.is_open()) {
+        std::cerr << "Error opening file for truncating." << std::endl;
+        file.close();
+        return -1;
+    }
+
+    // Write the first new_size bytes back to the file
+    file.seekg(0); // Go back to the start of the original file
+    char *buffer = new char[new_size]; // Allocate buffer to hold the data
+    file.read(buffer, new_size); // Read up to new_size bytes
+    ofs.write(buffer, new_size); // Write the buffer to the new file
+    delete[] buffer; // Clean up the allocated memory
+
+    // Close the file streams
+    file.close();
+    ofs.close();
+
+    std::cout << "Cleaned " << num_chars/8 << " characters from the end of the file." << std::endl;
+    return 0;
+}
+
 // BONUS: Implement below API calls to get bonus credits
 
 int gtfs_clean_n_bytes(gtfs_t *gtfs, int bytes){
@@ -619,7 +701,18 @@ int gtfs_clean_n_bytes(gtfs_t *gtfs, int bytes){
         VERBOSE_PRINT(do_verbose, "Cleaning up [ " << bytes << " bytes ] GTFileSystem inside directory " << gtfs->dirname << "\n");
         // Implement partial log cleaning by truncating the log after applying operations
         // For simplicity, assuming full log cleaning
-        ret = gtfs_clean(gtfs);
+        int cleaned_binary_bytes = bytes * 8 ;
+            // Open the file in binary mode
+        int ret = 0;
+        if(gtfs->log_file.is_open()){
+            gtfs->log_file.close();
+            ret = clean_characters_from_end(gtfs->log_filename,cleaned_binary_bytes);
+            gtfs->log_file.open(gtfs->log_filename.c_str(), std::ios::out | std::ios::app| std::ios::binary);
+        }
+        else{
+            ret = clean_characters_from_end(gtfs->log_filename,cleaned_binary_bytes);
+        }
+
     } else {
         VERBOSE_PRINT(do_verbose, "GTFileSystem does not exist\n");
         return ret;
@@ -630,12 +723,47 @@ int gtfs_clean_n_bytes(gtfs_t *gtfs, int bytes){
 }
 
 int gtfs_sync_write_file_n_bytes(write_t* write_op, int bytes){
-    int ret = -1;
+    int ret = 0;
     if (write_op) {
         VERBOSE_PRINT(do_verbose, "Persisting [ " << bytes << " bytes ] write of " << write_op->length << " bytes starting from offset " << write_op->offset << " inside file " << write_op->file->filename << "\n");
         // Implement partial write synchronization
         // For simplicity, assuming full write synchronization
-        ret = gtfs_sync_write_file(write_op);
+        gtfs_t *gtfs = write_op->gtfs;
+        // Construct the file path
+        std::string filepath = gtfs->dirname + "/" + write_op->file->filename;
+        if(bytes > write_op->length){
+            cerr<<"provided bytes longer than data"<<endl;
+            return -1;
+        }
+
+        // Open the file for writing
+        std::fstream outfile(filepath.c_str(), std::ios::in | std::ios::out);
+        if (!outfile) {
+            VERBOSE_PRINT(do_verbose, "Failed to open file for writing\n");
+            return -1;
+        }
+
+        // Seek to the offset
+        outfile.seekp(write_op->offset, std::ios::beg);
+        if (outfile.fail()) {
+            VERBOSE_PRINT(do_verbose, "Failed to seek in file\n");
+            outfile.close();
+            return -1;
+        }
+
+        // Write the data
+        VERBOSE_PRINT(do_verbose, "WRITTEN "<<write_op->data<<" of length "<<bytes);
+        outfile.write(write_op->data, bytes);
+        if (outfile.fail()) {
+            VERBOSE_PRINT(do_verbose, "Failed to write to file\n");
+            outfile.close();
+            return -1;
+        }
+
+        // Flush and close the file
+        outfile.flush();
+        outfile.close();
+
     } else {
         VERBOSE_PRINT(do_verbose, "Write operation does not exist\n");
         return ret;
