@@ -120,10 +120,10 @@ void test_truncate_log_n_bytes() {
     int truncate_byte = 18;
  //---------------------------case  where clean is used -----------------------
     gtfs_t *gtfs = gtfs_init(directory, verbose);
-    string filename = "test3.txt";
+    string filename = "test4.txt";
     file_t *fl = gtfs_open_file(gtfs, filename, 100);
 
-    string str = "Testing 3 string.\n";
+    string str = "Testing 4 string.\n";
     write_t *wrt1 = gtfs_write_file(gtfs, fl, 0, str.length(), str.c_str());
     gtfs_sync_write_file(wrt1);
 
@@ -148,7 +148,7 @@ void test_truncate_log_n_bytes() {
  //---------------------------case  where clean is unused -----------------------
 
     gtfs = gtfs_init(directory, verbose);
-    filename = "test3.txt";
+    filename = "test4.txt";
     fl = gtfs_open_file(gtfs, filename, 100);
     
     wrt1 = gtfs_write_file(gtfs, fl, 0, str.length(), str.c_str());
@@ -222,6 +222,90 @@ void test_write_n_byteds() {
     gtfs_close_file(gtfs, fl);
 }
 
+
+// Test 6 multi write and then sync
+void test_multi_write() {
+
+    gtfs_t *gtfs = gtfs_init(directory, verbose);
+    string filename = "test6.txt";
+    file_t *fl = gtfs_open_file(gtfs, filename, 100);
+
+    string str = "Testing string.\n";
+    write_t *wrt1 = gtfs_write_file(gtfs, fl, 0, str.length(), str.c_str());
+    
+
+    write_t *wrt2 = gtfs_write_file(gtfs, fl, 20, str.length(), str.c_str());
+    cout<<gtfs_sync_write_file(wrt2)<<"---------------------------------------"<<endl;
+    gtfs_sync_write_file(wrt1);
+    // gtfs_sync_write_file(wrt2);
+
+
+    char *data1 = gtfs_read_file(gtfs, fl, 20, str.length());
+    if (data1 != NULL) {
+        // First write was synced so reading should be successfull
+        if (str.compare(string(data1)) != 0) {
+            cout << FAIL;
+        }
+        // Second write was aborted and there was no string written in that offset
+        char *data2 = gtfs_read_file(gtfs, fl, 0, str.length());
+        if (data2 == NULL) {
+            cout << FAIL;
+        } else if (str.compare(string(data2)) == 0) {
+            cout << PASS;
+        }
+        else{
+            cout<<"||||"<<data2<<"|||\n"<<endl;
+            cout<<FAIL;
+        }
+    } else {
+        cout << FAIL;
+    }
+    gtfs_close_file(gtfs, fl);
+}
+
+// // Test 7 multi read before sync
+void test_read_before_syncwrite() {
+
+    gtfs_t *gtfs = gtfs_init(directory, verbose);
+    string filename = "test7.txt";
+    file_t *fl = gtfs_open_file(gtfs, filename, 100);
+
+    string str = "Testing string.\n";
+    write_t *wrt1 = gtfs_write_file(gtfs, fl, 0, str.length(), str.c_str());
+    
+
+    write_t *wrt2 = gtfs_write_file(gtfs, fl, 20, str.length(), str.c_str());
+    // gtfs_sync_write_file(wrt2);
+
+
+    char *data1 = gtfs_read_file(gtfs, fl, 20, str.length());
+    if (data1 != NULL) {
+        // First write was synced so reading should be successfull
+        if (str.compare(string(data1)) != 0) {
+            cout << FAIL;
+        }
+        // Second write was aborted and there was no string written in that offset
+        char *data2 = gtfs_read_file(gtfs, fl, 0, str.length());
+        if (data2 == NULL) {
+            cout << FAIL;
+        } else if (str.compare(string(data2)) == 0) {
+            cout << PASS;
+        }
+    } else {
+        cout << FAIL;
+    }
+    gtfs_sync_write_file(wrt2);
+    gtfs_sync_write_file(wrt1);
+    gtfs_close_file(gtfs, fl);
+}
+
+// Test 8 system crash during sync
+
+// Test 9 system crash during before sync
+
+
+
+
 int main(int argc, char **argv) {
     if (argc < 2)
         printf("Usage: ./test verbose_flag\n");
@@ -259,5 +343,15 @@ int main(int argc, char **argv) {
     cout << "================== Custom test - Test 5 ==================\n";
     cout << "Testing that the write are synced by only n bytes\n";
     test_write_n_byteds();
+
+    // test for 
+    cout << "================== Custom test - Test 6 ==================\n";
+    cout << "Testing that multi write are worked\n";
+    test_multi_write();
+
+
+    cout << "================== Custom test - Test 7 ==================\n";
+    cout << "Testing that the read form memory before sync\n";
+    test_read_before_syncwrite();
 
 }
