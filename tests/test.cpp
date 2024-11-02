@@ -397,11 +397,12 @@ void test_remove_file() {
     cout << "Before GTFS cleanup\n";
     system("ls -l .");
     // gtfs_close_file(gtfs, fl);
-
+    gtfs_close_file(gtfs,fl);
     gtfs_remove_file(gtfs,fl);
     
     filename = "test1.txt";
     fl = gtfs_open_file(gtfs, filename, 100);
+    gtfs_close_file(gtfs,fl);
     // gtfs_close_file(gtfs, fl);
     gtfs_remove_file(gtfs,fl);
 

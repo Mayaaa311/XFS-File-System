@@ -360,9 +360,8 @@ int gtfs_close_file(gtfs_t* gtfs, file_t* fl) {
             }
             // Remove the file from open_files
             gtfs->open_files.erase(fl->filename);
-            
+            gtfs->closed_files.insert(fl);
             // Clean up the file_t structure
-            delete fl;
             ret = 0;
         } else {
             VERBOSE_PRINT(do_verbose, "File is not open\n");
@@ -388,6 +387,7 @@ int gtfs_remove_file(gtfs_t* gtfs, file_t* fl) {
             VERBOSE_PRINT(do_verbose, "Cannot remove an open file\n");
             return -1;
         }
+        
 
         // Log the remove operation
         log_entry_t entry;
