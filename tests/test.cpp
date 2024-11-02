@@ -380,6 +380,39 @@ void test_reopen_close_pending() {
     
 }
 
+// Test 10 
+void test_remove_file() {
+
+    gtfs_t *gtfs = gtfs_init(directory, verbose);
+    string filename = "test10.txt";
+    file_t *fl = gtfs_open_file(gtfs, filename, 100);
+
+    string str = "Testing string.\n";
+    write_t *wrt1 = gtfs_write_file(gtfs, fl, 0, str.length(), str.c_str());
+    gtfs_sync_write_file(wrt1);
+
+    write_t *wrt2 = gtfs_write_file(gtfs, fl, 20, str.length(), str.c_str());
+    gtfs_sync_write_file(wrt2);
+
+    cout << "Before GTFS cleanup\n";
+    system("ls -l .");
+    // gtfs_close_file(gtfs, fl);
+
+    gtfs_remove_file(gtfs,fl);
+    
+    filename = "test1.txt";
+    fl = gtfs_open_file(gtfs, filename, 100);
+    // gtfs_close_file(gtfs, fl);
+    gtfs_remove_file(gtfs,fl);
+
+    cout << "After GTFS cleanup\n";
+    system("ls -l .");
+
+    cout << "If log is truncated: " << PASS << "If exactly same output:" << FAIL;
+
+
+
+}
 
 
 
@@ -439,4 +472,10 @@ int main(int argc, char **argv) {
     cout << "================== Custom test - Test 9 ==================\n";
     cout << "Testing that the crush during sync\n";
     test_reopen_close_pending();
+
+
+    //remove file 
+    cout << "================== Custom test - Test 10 ==================\n";
+    cout << "Testing remove file\n";
+    test_remove_file();
 }
