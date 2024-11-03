@@ -52,7 +52,7 @@ struct gtfs {
     struct flock fl;
     char mode;//recover, Normal
     unordered_map<string, file_t*> open_files;
-    unordered_set<file_t*> closed_files;
+    unordered_map<string,file_t*> closed_files;
     fstream log_file;
     string log_filename;
     int next_write_id;
@@ -62,7 +62,7 @@ struct gtfs {
             delete f.second;
         }
         for(auto f : closed_files){
-            delete f;
+            delete f.second;
         }       
     }
 };

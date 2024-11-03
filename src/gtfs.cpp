@@ -57,7 +57,7 @@ gtfs_t* gtfs_init(string directory, int verbose_flag) {
         // Directory does not exist, create it
         if (mkdir(directory.c_str(), 0777) != 0) {
             perror("mkdir");
-            VERBOSE_PRINT(do_verbose, "Failed to create directory\n");
+            std::cerr << "Failed to create directory\n";
             delete gtfs;
             return NULL;
         }
@@ -69,7 +69,7 @@ gtfs_t* gtfs_init(string directory, int verbose_flag) {
     VERBOSE_PRINT(do_verbose, "FILE map: "<<gtfs->open_files.size()<<endl);
     // Recover from log if necessary
     if (recover_from_log(gtfs) != 0) {
-        VERBOSE_PRINT(do_verbose, "Recovery from log failed\n");
+        std::cerr << "Recovery from log failed\n";
         delete gtfs;
         return NULL;
     }
@@ -77,7 +77,7 @@ gtfs_t* gtfs_init(string directory, int verbose_flag) {
     gtfs->log_file.open(gtfs->log_filename.c_str(), std::ios::out | std::ios::app| std::ios::binary);
 
     if (!gtfs->log_file.is_open()) {
-        VERBOSE_PRINT(do_verbose, "Failed to open log file\n");
+        std::cerr << "Failed to open log file\n";
         delete gtfs;
         return NULL;
     }
@@ -92,7 +92,7 @@ int recover_from_log(gtfs_t *gtfs) {
     VERBOSE_PRINT(do_verbose, "Recovering from log file\n");
     fstream log_file_in(gtfs->log_filename.c_str(), ios::in | std::ios::binary);
     if (!log_file_in.is_open()) {
-        VERBOSE_PRINT(do_verbose, "Failed to open log file for reading\n");
+        std::cerr << "Failed to open log file for reading\n";
         return -1;
     }
 
@@ -109,7 +109,7 @@ int recover_from_log(gtfs_t *gtfs) {
         istringstream iss(line);
         VERBOSE_PRINT(do_verbose, "line to string" << line << "END\n");
         if (!(iss >> entry.action >>  entry.write_id >> entry.filename >> entry.offset >> entry.length)) {
-            VERBOSE_PRINT(do_verbose, "Malformed log entry: " << line << "\n");
+            std::cerr <<  "Malformed log entry: " << line << "\n";
             continue;  // Skip malformed entries
         }
 
@@ -125,7 +125,7 @@ int recover_from_log(gtfs_t *gtfs) {
         iss.read(ch,1);
         iss.read(data_buf, entry.length);
         if(iss.gcount() != entry.length){
-            VERBOSE_PRINT(do_verbose, "Malformed log entry: " << line << "\n");
+            std::cerr << "Malformed log entry: " << line << "\n";
             continue;
         }
         // if its a begin
@@ -160,7 +160,7 @@ int recover_from_log(gtfs_t *gtfs) {
             file_t to_remove(entry.filename,entry.length);
             gtfs_remove_file(gtfs, &to_remove);
         }else {
-            VERBOSE_PRINT(do_verbose, "Unknown action in log: " << entry.action << "\n");
+            std::cerr << "Unknown action in log: " << entry.action << "\n";
             continue;
         }
         
@@ -217,13 +217,13 @@ int gtfs_clean(gtfs_t *gtfs) {
         // Check the file size
         struct stat st;
         if (stat(gtfs->log_filename.c_str(), &st) == 0 && st.st_size != 0) {
-            VERBOSE_PRINT(do_verbose, "Log file truncation failed\n");
+            std::cerr << "Log file truncation failed\n";
             return -1;
         }
 
         ret = 0;
     } else {
-        VERBOSE_PRINT(do_verbose, "GTFileSystem does not exist\n");
+        std::cerr << "GTFileSystem does not exist\n";
         return ret;
     }
 
@@ -232,7 +232,6 @@ int gtfs_clean(gtfs_t *gtfs) {
     return ret;
 }
 
-
 file_t* gtfs_open_file(gtfs_t* gtfs, string filename, int file_length) {
     file_t *fl = NULL;
     if (gtfs) {
@@ -240,59 +239,72 @@ file_t* gtfs_open_file(gtfs_t* gtfs, string filename, int file_length) {
 
         // Check if filename length is up to MAX_FILENAME_LEN
         if (filename.length() > MAX_FILENAME_LEN) {
-            VERBOSE_PRINT(do_verbose, "Filename too long\n");
+            std::cerr << "Filename too long\n";
             return NULL;
         }
         VERBOSE_PRINT(do_verbose, "NUM OPEN FILES:"<<gtfs->open_files.size()<<endl);
         // Check if the file is already open
         if (gtfs->open_files.find(filename) != gtfs->open_files.end()) {
     
-            VERBOSE_PRINT(do_verbose, "File is already open\n");
+            std::cerr << "File is already open\n";
             return NULL;
         }
+
+
+
 
         // Check if the number of files in the directory exceeds MAX_NUM_FILES_PER_DIR
         // We can count the number of files in the directory
         DIR *dir;
         struct dirent *ent;
         int file_count = 0;
-        
-        if ((dir = opendir(gtfs->dirname.c_str())) != NULL) {
-            while ((ent = readdir(dir)) != NULL) {
-                // Skip . and ..
-                if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
-                    continue;
-                // Skip the .gtfs_log file
-                if (strcmp(ent->d_name, ".gtfs_log") == 0)
-                    continue;
-                file_count++;
-            }
-            closedir(dir);
-        } else {
-            // Could not open directory
-            perror("opendir");
-            return NULL;
-        }
-
-        if (file_count >= MAX_NUM_FILES_PER_DIR) {
-            VERBOSE_PRINT(do_verbose, "Too many files in directory\n");
-            return NULL;
-        }
-
-        // Create the file_t instance
-        fl = new file_t(filename,file_length);
-
-        // Construct the full path to the file
         string filepath = gtfs->dirname + "/" + filename;
-
         // Check if the file exists
         struct stat sb;
+
+        if (!(stat(filepath.c_str(), &sb) == 0 && S_ISREG(sb.st_mode))){
+            if ((dir = opendir(gtfs->dirname.c_str())) != NULL) {
+                while ((ent = readdir(dir)) != NULL) {
+                    // Skip . and ..
+                    if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
+                        continue;
+                    // Skip the .gtfs_log file
+                    if (strcmp(ent->d_name, ".gtfs_log") == 0)
+                        continue;
+                    file_count++;
+                }
+                closedir(dir);
+            } else {
+                // Could not open directory
+                perror("opendir");
+                return NULL;
+            }
+
+            if (file_count >= MAX_NUM_FILES_PER_DIR) {
+                std::cerr << "Too many files in directory\n";
+                return NULL;
+            }
+        }
+    
+        if(gtfs->closed_files.find(filename)!=gtfs->closed_files.end()){
+            fl = gtfs->closed_files[filename];
+            fl->file_length = file_length;
+            gtfs->closed_files.erase(filename);
+        }
+        else{
+            // Create the file_t instance
+            fl = new file_t(filename,file_length);
+        }
+
+        // // Construct the full path to the file
+        // string filepath = gtfs->dirname + "/" + filename;
+
         if (stat(filepath.c_str(), &sb) == 0 && S_ISREG(sb.st_mode)) {
             // File exists
             // Check its length
             ifstream infile(filepath.c_str(), ios::ate);
             if (!infile) {
-                VERBOSE_PRINT(do_verbose, "Failed to open existing file\n");
+                std::cerr << "Failed to open existing file\n";
                 delete fl;
                 return NULL;
             }
@@ -302,7 +314,7 @@ file_t* gtfs_open_file(gtfs_t* gtfs, string filename, int file_length) {
                 // Extend the file
                 ofstream outfile(filepath.c_str(), ios::app);
                 if (!outfile) {
-                    VERBOSE_PRINT(do_verbose, "Failed to open existing file for appending\n");
+                    std::cerr << "Failed to open existing file for appending\n";
                     delete fl;
                     return NULL;
                 }
@@ -314,7 +326,7 @@ file_t* gtfs_open_file(gtfs_t* gtfs, string filename, int file_length) {
                 outfile.close();
             } else if (existing_length > file_length) {
                 // Operation not permitted
-                VERBOSE_PRINT(do_verbose, "Existing file length is larger than specified file_length\n");
+                std::cerr << "Existing file length is larger than specified file_length\n";
                 delete fl;
                 return NULL;
             }
@@ -322,7 +334,7 @@ file_t* gtfs_open_file(gtfs_t* gtfs, string filename, int file_length) {
             // File does not exist, create it
             ofstream outfile(filepath.c_str());
             if (!outfile) {
-                VERBOSE_PRINT(do_verbose, "Failed to create new file\n");
+                std::cerr << "Failed to create new file\n";
                 delete fl;
                 return NULL;
             }
@@ -337,7 +349,7 @@ file_t* gtfs_open_file(gtfs_t* gtfs, string filename, int file_length) {
         gtfs->open_files[filename] = fl;
 
     } else {
-        VERBOSE_PRINT(do_verbose, "GTFileSystem does not exist\n");
+        std::cerr << "GTFileSystem does not exist\n";
         return NULL;
     }
 
@@ -355,20 +367,20 @@ int gtfs_close_file(gtfs_t* gtfs, file_t* fl) {
         if (it != gtfs->open_files.end()) {
             // Ensure all pending writes are either committed or aborted
             if (!fl->pending_writes.empty()) {
-                VERBOSE_PRINT(do_verbose, "Cannot close file with pending writes\n");
+                std::cerr << "Cannot close file with pending writes\n";
                 return -1;
             }
             // Remove the file from open_files
             gtfs->open_files.erase(fl->filename);
-            gtfs->closed_files.insert(fl);
+            gtfs->closed_files[fl->filename]=fl;
             // Clean up the file_t structure
             ret = 0;
         } else {
-            VERBOSE_PRINT(do_verbose, "File is not open\n");
+            std::cerr << "File is not open\n";
             ret = -1;
         }
     } else {
-        VERBOSE_PRINT(do_verbose, "GTFileSystem or file does not exist\n");
+        std::cerr <<"GTFileSystem or file does not exist\n";
         ret = -1;
     }
     
@@ -384,7 +396,7 @@ int gtfs_remove_file(gtfs_t* gtfs, file_t* fl) {
         // Check if the file is in gtfs->open_files
         unordered_map<std::string, file_t*>::iterator it = gtfs->open_files.find(fl->filename);
         if (it != gtfs->open_files.end()) {
-            VERBOSE_PRINT(do_verbose, "Cannot remove an open file\n");
+            std::cerr << "Cannot remove an open file\n";
             return -1;
         }
         
@@ -399,7 +411,7 @@ int gtfs_remove_file(gtfs_t* gtfs, file_t* fl) {
         entry.write_id = gtfs->next_write_id++;
 
         if (write_log_entry(gtfs, entry) != 0) {
-            VERBOSE_PRINT(do_verbose, "Failed to write log entry for remove\n");
+            std::cerr << "Failed to write log entry for remove\n";
             return -1;
         }
 
@@ -409,14 +421,14 @@ int gtfs_remove_file(gtfs_t* gtfs, file_t* fl) {
         string filepath = gtfs->dirname + "/" + fl->filename;
         if (remove(filepath.c_str()) != 0) {
             perror("remove");
-            VERBOSE_PRINT(do_verbose, "Failed to remove file\n");
+            std::cerr << "Failed to remove file\n";
             return -1;
         }
 
         ret = 0;
 
     } else {
-        VERBOSE_PRINT(do_verbose, "GTFileSystem or file does not exist\n");
+        std::cerr << "GTFileSystem or file does not exist\n";
         ret = -1;
     }
 
@@ -431,7 +443,7 @@ char* gtfs_read_file(gtfs_t* gtfs, file_t* fl, int offset, int length) {
 
         // Check if offset and length are valid
         if (offset < 0 || length < 0 || offset + length > fl->file_length) {
-            VERBOSE_PRINT(do_verbose, "Invalid offset or length\n");
+        std::cerr << "Invalid offset or length\n";
             return NULL;
         }
 
@@ -439,7 +451,7 @@ char* gtfs_read_file(gtfs_t* gtfs, file_t* fl, int offset, int length) {
         std::string filepath = gtfs->dirname + "/" + fl->filename;
         std::ifstream infile(filepath.c_str());
         if (!infile) {
-            VERBOSE_PRINT(do_verbose, "Failed to open file for reading\n");
+            std::cerr << "Failed to open file for reading\n";
             return NULL;
         }
 
@@ -471,7 +483,7 @@ char* gtfs_read_file(gtfs_t* gtfs, file_t* fl, int offset, int length) {
         delete[] data;
 
     } else {
-        VERBOSE_PRINT(do_verbose, "GTFileSystem or file does not exist\n");
+        std::cerr << "GTFileSystem or file does not exist\n";
         return NULL;
     }
 
@@ -487,7 +499,7 @@ write_t* gtfs_write_file(gtfs_t* gtfs, file_t* fl, int offset, int length, const
 
         // Check if offset and length are valid
         if (offset < 0 || length < 0 || offset + length > fl->file_length) {
-            VERBOSE_PRINT(do_verbose, "Invalid offset or length\n");
+            std::cerr <<"Invalid offset or length\n";
             return NULL;
         }
 
@@ -513,14 +525,14 @@ write_t* gtfs_write_file(gtfs_t* gtfs, file_t* fl, int offset, int length, const
         entry.write_id = gtfs->next_write_id++;
 
         if (write_log_entry(gtfs, entry) != 0) {
-            VERBOSE_PRINT(do_verbose, "Failed to write log entry for write\n");
+            std::cerr << "Failed to write log entry for write\n";
             return NULL;
         }
 
         flush_log_file(gtfs);
 
     } else {
-        VERBOSE_PRINT(do_verbose, "GTFileSystem or file does not exist\n");
+        std::cerr << "GTFileSystem or file does not exist\n";
         return NULL;
     }
 
@@ -548,7 +560,7 @@ int gtfs_sync_write_file(write_t* write_op) {
             entry.write_id = write_op->write_id;
             VERBOSE_PRINT(do_verbose, "WROTE in sync to log: "<< entry.data<<"end");
             if (write_log_entry(gtfs, entry) != 0) {
-                VERBOSE_PRINT(do_verbose, "Failed to write log entry for write\n");
+                std::cerr << "Failed to write log entry for write\n";
                 return -1;
             }
 
@@ -561,14 +573,14 @@ int gtfs_sync_write_file(write_t* write_op) {
         // Open the file for writing
         std::fstream outfile(filepath.c_str(), std::ios::in | std::ios::out);
         if (!outfile) {
-            VERBOSE_PRINT(do_verbose, "Failed to open file for writing\n");
+            std::cerr << "Failed to open file for writing\n";
             return -1;
         }
 
         // Seek to the offset
         outfile.seekp(write_op->offset, std::ios::beg);
         if (outfile.fail()) {
-            VERBOSE_PRINT(do_verbose, "Failed to seek in file\n");
+            std::cerr << "Failed to seek in file\n";
             outfile.close();
             return -1;
         }
@@ -577,7 +589,7 @@ int gtfs_sync_write_file(write_t* write_op) {
         VERBOSE_PRINT(do_verbose, "WRITTEN "<<write_op->data<<" of length "<<write_op->length);
         outfile.write(write_op->data, write_op->length);
         if (outfile.fail()) {
-            VERBOSE_PRINT(do_verbose, "Failed to write to file\n");
+            std::cerr << "Failed to write to file\n";
             outfile.close();
             return -1;
         }
@@ -591,12 +603,10 @@ int gtfs_sync_write_file(write_t* write_op) {
         pending_writes.erase(std::remove(pending_writes.begin(), pending_writes.end(), write_op), pending_writes.end());
 
 
-
-
         ret = write_op->length;
 
     } else {
-        VERBOSE_PRINT(do_verbose, "Write operation does not exist\n");
+        std::cerr << "Write operation does not exist\n";
         return -1;
     }
 
@@ -623,7 +633,7 @@ int gtfs_abort_write_file(write_t* write_op) {
             entry.write_id = write_op->write_id;
             VERBOSE_PRINT(do_verbose, "WROTE in sync to log: "<< entry.data<<"end");
             if (write_log_entry(gtfs, entry) != 0) {
-                VERBOSE_PRINT(do_verbose, "Failed to write log entry for write\n");
+                std::cerr << "Failed to write log entry for write\n";
                 return -1;
             }
 
@@ -637,7 +647,7 @@ int gtfs_abort_write_file(write_t* write_op) {
         ret = 0;
 
     } else {
-        VERBOSE_PRINT(do_verbose, "Write operation does not exist\n");
+        std::cerr << "Write operation does not exist\n";
         return -1;
     }
 
@@ -714,7 +724,7 @@ int gtfs_clean_n_bytes(gtfs_t *gtfs, int bytes){
         }
 
     } else {
-        VERBOSE_PRINT(do_verbose, "GTFileSystem does not exist\n");
+        std::cerr << "GTFileSystem does not exist\n";
         return ret;
     }
 
@@ -739,14 +749,14 @@ int gtfs_sync_write_file_n_bytes(write_t* write_op, int bytes){
         // Open the file for writing
         std::fstream outfile(filepath.c_str(), std::ios::in | std::ios::out);
         if (!outfile) {
-            VERBOSE_PRINT(do_verbose, "Failed to open file for writing\n");
+            std::cerr << "Failed to open file for writing\n";
             return -1;
         }
 
         // Seek to the offset
         outfile.seekp(write_op->offset, std::ios::beg);
         if (outfile.fail()) {
-            VERBOSE_PRINT(do_verbose, "Failed to seek in file\n");
+            std::cerr << "Failed to seek in file\n";
             outfile.close();
             return -1;
         }
@@ -755,7 +765,7 @@ int gtfs_sync_write_file_n_bytes(write_t* write_op, int bytes){
         VERBOSE_PRINT(do_verbose, "WRITTEN "<<write_op->data<<" of length "<<bytes);
         outfile.write(write_op->data, bytes);
         if (outfile.fail()) {
-            VERBOSE_PRINT(do_verbose, "Failed to write to file\n");
+            std::cerr << "Failed to write to file\n";
             outfile.close();
             return -1;
         }
@@ -765,7 +775,7 @@ int gtfs_sync_write_file_n_bytes(write_t* write_op, int bytes){
         outfile.close();
 
     } else {
-        VERBOSE_PRINT(do_verbose, "Write operation does not exist\n");
+        std::cerr << "Write operation does not exist\n";
         return ret;
     }
 

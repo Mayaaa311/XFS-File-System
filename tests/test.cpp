@@ -235,7 +235,7 @@ void test_multi_write() {
     
 
     write_t *wrt2 = gtfs_write_file(gtfs, fl, 20, str.length(), str.c_str());
-    cout<<gtfs_sync_write_file(wrt2)<<"---------------------------------------"<<endl;
+    gtfs_sync_write_file(wrt2);
     gtfs_sync_write_file(wrt1);
     // gtfs_sync_write_file(wrt2);
 
@@ -312,8 +312,8 @@ void test_sync_crush() {
     gtfs_sync_write_file(wrt1);
     //delete and then recreate to simulate a crush on sync
     //remove the file
-    if( remove(filename.c_str()) == 0){
-        cout<< "sucess delete file"<<endl;
+    if( remove(filename.c_str()) != 0){
+       cout<<"fail to delete file"<<endl;
     };
     //recreate the file so that we have a clean file
     std::ofstream file(filename.c_str());
@@ -342,7 +342,7 @@ void test_sync_crush() {
     gtfs_close_file(gtfs, fl);
 }
 
-// Test 9 close peding write and double open file
+// Test 9 close pending write and double open file
 void test_reopen_close_pending() {
 
     gtfs_t *gtfs = gtfs_init(directory, verbose);
@@ -356,15 +356,16 @@ void test_reopen_close_pending() {
     gtfs_close_file(gtfs,fl);
     file_t *fl_place_holder = gtfs_open_file(gtfs, filename, 100);
     gtfs_close_file(gtfs, fl);
-    cout<<"if error messge occur"<<PASS<<" else "<<FAIL<<endl;
+    cout<<"if 3 error messge occur above "<<PASS<<" else "<<FAIL<<endl;
     char *data1 = gtfs_read_file(gtfs, fl, 0, str.length());
     
+    cout<<"test if both writes could still be read";
     if (data1 != NULL) {
         // First write was synced so reading should be successfull
         if (str.compare(string(data1)) != 0) {
             cout << FAIL;
         }
-        // Second write was aborted and there was no string written in that offset
+
         char *data2 = gtfs_read_file(gtfs, fl, 20, str.length());
         if (data2 == NULL) {
             cout << FAIL;
@@ -409,7 +410,7 @@ void test_remove_file() {
     cout << "After GTFS cleanup\n";
     system("ls -l .");
 
-    cout << "If log is truncated: " << PASS << "If exactly same output:" << FAIL;
+    cout << "If test1.txt and test10.txt are gone: " << PASS << "If test1.txt and test10.txt are still in the directory: " << FAIL;
 
 
 
@@ -457,21 +458,21 @@ int main(int argc, char **argv) {
 
     // test for 
     cout << "================== Custom test - Test 6 ==================\n";
-    cout << "Testing that multi write are worked\n";
+    cout << "Testing that multi write worked\n";
     test_multi_write();
 
 
     cout << "================== Custom test - Test 7 ==================\n";
-    cout << "Testing that the read form memory before sync\n";
+    cout << "Testing reading unsynced data\n";
     test_read_before_syncwrite();
 
     cout << "================== Custom test - Test 8 ==================\n";
-    cout << "Testing that the crush during sync\n";
+    cout << "Testing crush during sync\n";
     test_sync_crush();
 
-    //cannot close with pending write       cannot double open file 
+
     cout << "================== Custom test - Test 9 ==================\n";
-    cout << "Testing that the crush during sync\n";
+    cout << "Testing close file with pending write, double opening file, and read only synced data\n";
     test_reopen_close_pending();
 
 
