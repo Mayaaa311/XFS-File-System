@@ -237,7 +237,7 @@ void test_multi_write() {
     write_t *wrt2 = gtfs_write_file(gtfs, fl, 20, str.length(), str.c_str());
     gtfs_sync_write_file(wrt2);
     gtfs_sync_write_file(wrt1);
-    // gtfs_sync_write_file(wrt2);
+
 
 
     char *data1 = gtfs_read_file(gtfs, fl, 20, str.length());
