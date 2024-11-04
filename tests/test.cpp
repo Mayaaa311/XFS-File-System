@@ -404,13 +404,42 @@ void test_remove_file() {
     filename = "test1.txt";
     fl = gtfs_open_file(gtfs, filename, 100);
     gtfs_close_file(gtfs,fl);
-    // gtfs_close_file(gtfs, fl);
     gtfs_remove_file(gtfs,fl);
 
     cout << "After GTFS cleanup\n";
     system("ls -l .");
 
     cout << "If test1.txt and test10.txt are gone: " << PASS << "If test1.txt and test10.txt are still in the directory: " << FAIL;
+
+
+
+}
+
+// Test 11
+void test_open_file_size() {
+
+    gtfs_t *gtfs = gtfs_init(directory, verbose);
+    string filename = "test11.txt";
+    file_t *fl = gtfs_open_file(gtfs, filename, 100);
+
+    string str = "Testing string.\n";
+    write_t *wrt1 = gtfs_write_file(gtfs, fl, 0, str.length(), str.c_str());
+    gtfs_sync_write_file(wrt1);
+
+    write_t *wrt2 = gtfs_write_file(gtfs, fl, 20, str.length(), str.c_str());
+    gtfs_sync_write_file(wrt2);
+
+    gtfs_close_file(gtfs,fl);    
+    fl = gtfs_open_file(gtfs, filename, 120);
+    gtfs_close_file(gtfs,fl);
+    // gtfs_close_file(gtfs, fl);
+    fl = gtfs_open_file(gtfs, filename, 100);
+    gtfs_close_file(gtfs,fl);
+
+
+
+
+    cout << "If error message on open file: " << PASS << " If sucess open file with smaller length " << FAIL;
 
 
 
@@ -480,4 +509,8 @@ int main(int argc, char **argv) {
     cout << "================== Custom test - Test 10 ==================\n";
     cout << "Testing remove file\n";
     test_remove_file();
+
+    cout << "================== Custom test - Test 11 ==================\n";
+    cout << "Testing open file with larger size and smaller\n";
+    test_open_file_size();
 }
