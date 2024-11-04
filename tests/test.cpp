@@ -3,7 +3,7 @@
 // Assumes files are located within the current directory
 string directory;
 int verbose;
-
+#include <filesystem> 
 // **Test 1**: Testing that data written by one process is then successfully read by another process.
 void writer() {
     gtfs_t *gtfs = gtfs_init(directory, verbose);
@@ -419,7 +419,15 @@ void test_remove_file() {
 void test_open_file_size() {
 
     gtfs_t *gtfs = gtfs_init(directory, verbose);
-    string filename = "test11.txt";
+    string filename = "test11.txt";    
+    try {
+        // Attempt to delete the file
+        if (std::remove(filename.c_str()) != 0) {
+            throw std::runtime_error("Failed to delete the file.");
+        }
+    } catch (const std::exception& e) {}
+
+
     file_t *fl = gtfs_open_file(gtfs, filename, 100);
 
     string str = "Testing string.\n";
@@ -430,18 +438,15 @@ void test_open_file_size() {
     gtfs_sync_write_file(wrt2);
 
     gtfs_close_file(gtfs,fl);    
+    cout<<"------------------OPENING LARGER SIZE: -----------------"<<endl;
     fl = gtfs_open_file(gtfs, filename, 120);
     gtfs_close_file(gtfs,fl);
     // gtfs_close_file(gtfs, fl);
+    cout<<"-----------------OPENING SMALLER SIZE: -----------------"<<endl;
     fl = gtfs_open_file(gtfs, filename, 100);
     gtfs_close_file(gtfs,fl);
 
-
-
-
-    cout << "If error message on open file: " << PASS << " If sucess open file with smaller length " << FAIL;
-
-
+    cout << "If no error after the OPENING LARGER SIZE and error message after the OPENING SMALLER SIZE open file: " << PASS << ", else " << FAIL;
 
 }
 

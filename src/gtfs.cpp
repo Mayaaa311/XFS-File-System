@@ -113,6 +113,13 @@ int recover_from_log(gtfs_t *gtfs) {
             continue;  // Skip malformed entries
         }
 
+        // if file does not exist in the directory, skip the log entry
+        string filepath = gtfs->dirname + "/" + entry.filename;
+        struct stat sb;
+        if (!(stat(filepath.c_str(), &sb) == 0 && S_ISREG(sb.st_mode))){
+            continue;
+        }
+
         if(gtfs->open_files.find(entry.filename) == gtfs->open_files.end()){
             file_t curfile(entry.filename, entry.length);
             gtfs->open_files[entry.filename] = &curfile;
@@ -310,7 +317,7 @@ file_t* gtfs_open_file(gtfs_t* gtfs, string filename, int file_length) {
             }
             int existing_length = infile.tellg();
             infile.close();
-            if (existing_length < file_length) {
+            if (existing_length <= file_length) {
                 // Extend the file
                 ofstream outfile(filepath.c_str(), ios::app);
                 if (!outfile) {
@@ -380,7 +387,7 @@ int gtfs_close_file(gtfs_t* gtfs, file_t* fl) {
             ret = -1;
         }
     } else {
-        std::cerr <<"GTFileSystem or file does not exist\n";
+        std::cerr <<" in close file： GTFileSystem or file does not exist\n";
         ret = -1;
     }
     
@@ -428,7 +435,7 @@ int gtfs_remove_file(gtfs_t* gtfs, file_t* fl) {
         ret = 0;
 
     } else {
-        std::cerr << "GTFileSystem or file does not exist\n";
+        std::cerr << "in remove file: GTFileSystem or file does not exist\n";
         ret = -1;
     }
 
@@ -573,7 +580,7 @@ int gtfs_sync_write_file(write_t* write_op) {
         // Open the file for writing
         std::fstream outfile(filepath.c_str(), std::ios::in | std::ios::out);
         if (!outfile) {
-            std::cerr << "Failed to open file for writing\n";
+            std::cerr << "Failed to open file "<<fl->filename<<" for writing\n";
             return -1;
         }
 
